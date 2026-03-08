@@ -1,108 +1,107 @@
---// ESP Dinámico Npc or Die: tu equipo + NPCs según rol con destrucción automática
---// RAW / LOCAL
+--------------------------------------------------
+-- TOGGLE
+--------------------------------------------------
+if getgenv().ESP_TEAM then
+	getgenv().ESP_TEAM = false
 
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local Workspace = game:GetService("Workspace")
-local LocalPlayer = Players.LocalPlayer
-
--- ======== DESTRUCCIÓN SI YA EXISTE ========
-if _G.ESPTeamHighlights then
-	for target, hl in pairs(_G.ESPTeamHighlights) do
-		if hl then hl:Destroy() end
+	-- borrar ESP existentes
+	for _,v in pairs(workspace:GetDescendants()) do
+		if v:IsA("Highlight") and v.Name == "ESP_TEAM" then
+			v:Destroy()
+		end
 	end
-	_G.ESPTeamHighlights = nil
-	print("ESP de equipo destruido ❌")
+
 	return
 end
 
--- ======== VARIABLES ========
-local highlights = {}
-_G.ESPTeamHighlights = highlights
+getgenv().ESP_TEAM = true
 
--- ======== FUNCIONES ========
-local function aplicarHighlight(target, color, visible)
-	if not target or not target:IsA("Model") then return end
+--------------------------------------------------
+-- SERVICIOS
+--------------------------------------------------
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
 
-	if not highlights[target] then
-		local hl = Instance.new("Highlight")
-		hl.Name = "ESP_Highlight"
-		hl.Adornee = target
-		hl.FillTransparency = 0.5
-		hl.OutlineTransparency = 0
-		hl.Parent = workspace
-		highlights[target] = hl
-	end
+--------------------------------------------------
+-- BUSCAR MODELO REAL
+--------------------------------------------------
+local function getRealModel(player)
 
-	local hl = highlights[target]
-	hl.FillColor = color
-	hl.OutlineColor = color
-	hl.Enabled = visible
-end
+	for _,model in pairs(workspace:GetDescendants()) do
+		if model:IsA("Model") and model.Name == player.Name then
 
-local function obtenerMiRol()
-	if LocalPlayer.Team then
-		local t = LocalPlayer.Team.Name:lower()
-		if t == "sheriffs" then
-			return "sheriff"
-		elseif t == "criminals" then
-			return "criminal"
-		else
-			return "lobby"
-		end
-	else
-		return "lobby"
-	end
-end
-
-local function obtenerRol(plr)
-	if plr.Team then
-		local t = plr.Team.Name:lower()
-		if t == "sheriffs" then
-			return "sheriff"
-		else
-			return "criminal"
-		end
-	else
-		return "criminal"
-	end
-end
-
--- ======== LOOP ESP ========
-local conn
-conn = RunService.Heartbeat:Connect(function()
-	local miRol = obtenerMiRol()
-	local color = Color3.fromRGB(0, 255, 0) -- verde para tu equipo
-
-	if miRol == "lobby" then
-		for target, hl in pairs(highlights) do
-			if hl then hl:Destroy() end
-		end
-		highlights = {}
-		return
-	end
-
-	for _, plr in pairs(Players:GetPlayers()) do
-		if plr ~= LocalPlayer and plr.Character then
-			local plrRol = obtenerRol(plr)
-			local mismoEquipo = (plrRol == miRol)
-			aplicarHighlight(plr.Character, color, mismoEquipo)
-		end
-	end
-
-	if miRol == "criminal" then
-		for _, npc in pairs(Workspace:GetDescendants()) do
-			if npc:IsA("Model") and npc.Name:find("NPC") then
-				aplicarHighlight(npc, color, true)
+			if model:FindFirstChildWhichIsA("AudioEmitter", true)
+			or model:FindFirstChild("GunSource", true) then
+				return model
 			end
+
 		end
 	end
-end)
 
--- ======== LIMPIEZA ========
-Players.PlayerRemoving:Connect(function(player)
-	if highlights[player] then
-		highlights[player]:Destroy()
-		highlights[player] = nil
+end
+
+--------------------------------------------------
+-- APLICAR ESP
+--------------------------------------------------
+local function aplicarESP(player)
+
+	if player == LocalPlayer then return end
+
+	task.spawn(function()
+
+		while player.Parent and getgenv().ESP_TEAM do
+
+			if LocalPlayer.Team and player.Team then
+
+				local myTeam = LocalPlayer.Team.Name
+				local team = player.Team.Name
+
+				if myTeam == "Criminals" or myTeam == "Sheriffs" then
+
+					if team == myTeam then
+
+						local model = getRealModel(player)
+
+						if model then
+
+							local h = model:FindFirstChild("ESP_TEAM")
+
+							if not h then
+								h = Instance.new("Highlight")
+								h.Name = "ESP_TEAM"
+								h.FillColor = Color3.fromRGB(0,255,0)
+								h.OutlineColor = Color3.fromRGB(0,255,0)
+								h.FillTransparency = 0.5
+								h.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+								h.Adornee = model
+								h.Parent = model
+							end
+
+						end
+
+					end
+
+				end
+
+			end
+
+			task.wait(1)
+
+		end
+
+	end)
+
+end
+
+--------------------------------------------------
+-- INICIAR
+--------------------------------------------------
+for _,player in pairs(Players:GetPlayers()) do
+	aplicarESP(player)
+end
+
+Players.PlayerAdded:Connect(function(player)
+	if getgenv().ESP_TEAM then
+		aplicarESP(player)
 	end
 end)
